@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageCircle, X, Send, Bot, Sparkles, ExternalLink } from 'lucide-react';
+import { MessageCircle, X, Send, Bot, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
 import { ChatMessage, Disease } from '../types';
 import { useLanguage } from '../contexts/LanguageContext';
 import { vetCareAI, ChatResponse } from '../utils/aiChatbot';
@@ -25,6 +25,7 @@ const Chatbot: React.FC = () => {
   ]);
   const [currentMessage, setCurrentMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [expandedDiseases, setExpandedDiseases] = useState<Set<string>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -48,6 +49,7 @@ const Chatbot: React.FC = () => {
           : ['Fever symptoms in cattle', 'Milk reduction in buffaloes', 'Livestock vaccination']
       }
     ]);
+    setExpandedDiseases(new Set());
   }, [t, language]);
 
   const handleSendMessage = async (messageText?: string) => {
@@ -65,8 +67,8 @@ const Chatbot: React.FC = () => {
     setCurrentMessage('');
     setIsTyping(true);
 
-    // Simulate AI processing delay
-    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
+    // Faster response time for better responsiveness
+    await new Promise(resolve => setTimeout(resolve, 300 + Math.random() * 400));
 
     // Get AI response
     const aiResponse: ChatResponse = vetCareAI.processQuery(textToSend, language);
@@ -88,65 +90,206 @@ const Chatbot: React.FC = () => {
     handleSendMessage(suggestion);
   };
 
-  const DiseasePreview: React.FC<{ disease: Disease }> = ({ disease }) => {
-    const getLocalizedName = () => {
-      return language === 'ta' && disease.nameTa ? disease.nameTa : disease.name;
+  const toggleDiseaseExpansion = (diseaseId: string) => {
+    setExpandedDiseases(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(diseaseId)) {
+        newSet.delete(diseaseId);
+      } else {
+        newSet.add(diseaseId);
+      }
+      return newSet;
+    });
+  };
+
+  const DiseasePreview: React.FC<{ disease: Disease; messageId: string }> = ({ disease, messageId }) => {
+    const isExpanded = expandedDiseases.has(`${messageId}-${disease.id}`);
+    const expandKey = `${messageId}-${disease.id}`;
+
+    const getLocalizedContent = () => {
+      if (language === 'ta') {
+        return {
+          name: disease.nameTa || disease.name,
+          treatmentName: disease.treatmentNameTa || disease.treatmentName,
+          symptoms: disease.symptomsTa || disease.symptoms,
+          ingredients: disease.ingredientsTa || disease.ingredients,
+          preparation: disease.preparationTa || disease.preparation,
+          dosage: disease.dosageTa || disease.dosage
+        };
+      }
+      return {
+        name: disease.name,
+        treatmentName: disease.treatmentName,
+        symptoms: disease.symptoms,
+        ingredients: disease.ingredients,
+        preparation: disease.preparation,
+        dosage: disease.dosage
+      };
     };
 
-    const getLocalizedTreatment = () => {
-      return language === 'ta' && disease.treatmentNameTa ? disease.treatmentNameTa : disease.treatmentName;
+    const localizedContent = getLocalizedContent();
+    const getSeverityColor = (severity: string) => {
+      switch (severity) {
+        case 'High': return 'bg-red-100 text-red-700 border-red-200';
+        case 'Medium': return 'bg-yellow-100 text-yellow-700 border-yellow-200';
+        case 'Low': return 'bg-green-100 text-green-700 border-green-200';
+        default: return 'bg-gray-100 text-gray-700 border-gray-200';
+      }
+    };
+
+    const getSeverityText = (severity: string) => {
+      if (language === 'ta') {
+        switch (severity) {
+          case 'High': return 'அதிகம்';
+          case 'Medium': return 'நடுத்தரம்';
+          case 'Low': return 'குறைவு';
+          default: return severity;
+        }
+      }
+      return severity;
     };
 
     return (
-      <div className="bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-lg p-3 mt-2 hover:shadow-md transition-shadow duration-200">
-        <div className="flex items-start justify-between">
-          <div className="flex-1">
-            <h5 className="font-semibold text-green-800 text-sm">{getLocalizedName()}</h5>
-            <p className="text-xs text-green-600 mt-1">{getLocalizedTreatment()}</p>
-            <div className="flex items-center mt-2 space-x-2">
-              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                disease.severity === 'High' ? 'bg-red-100 text-red-700' :
-                disease.severity === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
-                'bg-green-100 text-green-700'
-              }`}>
-                {disease.severity}
-              </span>
-              <span className="text-xs text-gray-600">
-                {disease.affectedAnimals.join(', ')}
-              </span>
+      <div className="bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-lg mt-2 overflow-hidden hover:shadow-md transition-all duration-200">
+        {/* Header - Always visible */}
+        <div 
+          className="p-3 cursor-pointer hover:bg-green-100 transition-colors duration-200"
+          onClick={() => toggleDiseaseExpansion(expandKey)}
+        >
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <div className="flex items-center space-x-2 mb-1">
+                <h5 className="font-semibold text-green-800 text-sm">{localizedContent.name}</h5>
+                <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getSeverityColor(disease.severity)}`}>
+                  {getSeverityText(disease.severity)}
+                </span>
+              </div>
+              <p className="text-xs text-green-600 mb-2">{localizedContent.treatmentName}</p>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-600">
+                  {language === 'ta' ? 'பாதிக்கும்:' : 'Affects:'} {disease.affectedAnimals.map(animal => 
+                    language === 'ta' ? (animal === 'Cattle' ? 'மாடுகள்' : 'எருமைகள்') : animal
+                  ).join(', ')}
+                </span>
+                <div className="flex items-center space-x-1">
+                  <span className="text-xs text-blue-600">
+                    {language === 'ta' ? (isExpanded ? 'மறைக்க' : 'விரிவாக பார்க்க') : (isExpanded ? 'Hide details' : 'View details')}
+                  </span>
+                  {isExpanded ? <ChevronUp size={14} className="text-blue-600" /> : <ChevronDown size={14} className="text-blue-600" />}
+                </div>
+              </div>
             </div>
           </div>
-          <ExternalLink size={14} className="text-green-600 flex-shrink-0 ml-2" />
         </div>
+
+        {/* Expanded Content */}
+        {isExpanded && (
+          <div className="px-3 pb-3 border-t border-green-200 bg-white">
+            <div className="space-y-3 mt-3">
+              {/* Symptoms */}
+              <div>
+                <h6 className="font-medium text-gray-800 text-xs mb-1 flex items-center">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full mr-2"></div>
+                  {language === 'ta' ? 'அறிகுறிகள்' : 'Symptoms'}
+                </h6>
+                <div className="flex flex-wrap gap-1">
+                  {localizedContent.symptoms.slice(0, 4).map((symptom, index) => (
+                    <span
+                      key={index}
+                      className="bg-blue-50 text-blue-700 px-2 py-1 rounded-full text-xs border border-blue-200"
+                    >
+                      {symptom}
+                    </span>
+                  ))}
+                  {localizedContent.symptoms.length > 4 && (
+                    <span className="text-xs text-gray-500 px-2 py-1">
+                      +{localizedContent.symptoms.length - 4} {language === 'ta' ? 'மேலும்' : 'more'}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Ingredients */}
+              <div>
+                <h6 className="font-medium text-gray-800 text-xs mb-1 flex items-center">
+                  <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                  {language === 'ta' ? 'பொருட்கள்' : 'Ingredients'}
+                </h6>
+                <div className="flex flex-wrap gap-1">
+                  {localizedContent.ingredients.slice(0, 3).map((ingredient, index) => (
+                    <span
+                      key={index}
+                      className="bg-green-50 text-green-700 px-2 py-1 rounded-full text-xs border border-green-200"
+                    >
+                      {ingredient}
+                    </span>
+                  ))}
+                  {localizedContent.ingredients.length > 3 && (
+                    <span className="text-xs text-gray-500 px-2 py-1">
+                      +{localizedContent.ingredients.length - 3} {language === 'ta' ? 'மேலும்' : 'more'}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Preparation */}
+              <div>
+                <h6 className="font-medium text-gray-800 text-xs mb-1 flex items-center">
+                  <div className="w-2 h-2 bg-purple-500 rounded-full mr-2"></div>
+                  {language === 'ta' ? 'தயாரிப்பு' : 'Preparation'}
+                </h6>
+                <p className="text-xs text-gray-700 bg-purple-50 p-2 rounded border border-purple-200 leading-relaxed">
+                  {localizedContent.preparation.length > 120 
+                    ? `${localizedContent.preparation.substring(0, 120)}...` 
+                    : localizedContent.preparation
+                  }
+                </p>
+              </div>
+
+              {/* Dosage */}
+              <div>
+                <h6 className="font-medium text-gray-800 text-xs mb-1 flex items-center">
+                  <div className="w-2 h-2 bg-orange-500 rounded-full mr-2"></div>
+                  {language === 'ta' ? 'அளவு மற்றும் பயன்பாடு' : 'Dosage & Application'}
+                </h6>
+                <p className="text-xs text-gray-700 bg-orange-50 p-2 rounded border border-orange-200 leading-relaxed">
+                  {localizedContent.dosage.length > 100 
+                    ? `${localizedContent.dosage.substring(0, 100)}...` 
+                    : localizedContent.dosage
+                  }
+                </p>
+              </div>
+
+              {/* Action Button */}
+              <div className="pt-2 border-t border-gray-200">
+                <button 
+                  onClick={() => handleSendMessage(`${language === 'ta' ? 'மேலும் தகவல்' : 'More information about'} ${localizedContent.name}`)}
+                  className="w-full bg-gradient-to-r from-green-600 to-green-700 text-white py-2 px-3 rounded text-xs font-medium hover:from-green-700 hover:to-green-800 transition-all duration-200 flex items-center justify-center space-x-1"
+                >
+                  <ExternalLink size={12} />
+                  <span>{language === 'ta' ? 'மேலும் தகவல் பெறுங்கள்' : 'Get More Information'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
 
   return (
     <>
-      {/* Chat Button */}
+      {/* Chat Button - Removed AI indicator */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-6 right-6 bg-gradient-to-r from-green-600 to-green-700 text-white p-4 rounded-full shadow-lg hover:from-green-700 hover:to-green-800 transform hover:scale-110 transition-all duration-200 z-50 group"
+        className="fixed bottom-6 right-6 bg-gradient-to-r from-green-600 to-green-700 text-white p-4 rounded-full shadow-lg hover:from-green-700 hover:to-green-800 transform hover:scale-110 transition-all duration-200 z-50"
       >
-        {isOpen ? (
-          <X size={24} />
-        ) : (
-          <div className="relative">
-            <MessageCircle size={24} />
-            <Sparkles size={12} className="absolute -top-1 -right-1 text-yellow-300 animate-pulse" />
-          </div>
-        )}
-        {!isOpen && (
-          <div className="absolute -top-2 -left-2 bg-red-500 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center animate-bounce">
-            AI
-          </div>
-        )}
+        {isOpen ? <X size={24} /> : <MessageCircle size={24} />}
       </button>
 
       {/* Chat Window */}
       {isOpen && (
-        <div className="fixed bottom-24 right-6 w-80 md:w-96 bg-white rounded-lg shadow-2xl border border-gray-200 z-50 max-h-[70vh] flex flex-col">
+        <div className="fixed bottom-24 right-6 w-80 md:w-96 bg-white rounded-lg shadow-2xl border border-gray-200 z-50 max-h-[75vh] flex flex-col">
           {/* Header */}
           <div className="bg-gradient-to-r from-green-600 to-green-700 text-white p-4 rounded-t-lg flex-shrink-0">
             <div className="flex items-center space-x-2">
@@ -156,7 +299,9 @@ const Chatbot: React.FC = () => {
               </div>
               <div>
                 <h3 className="font-semibold">{t('chat.title')}</h3>
-                <p className="text-xs text-green-100">AI-Powered Assistant</p>
+                <p className="text-xs text-green-100">
+                  {language === 'ta' ? 'உடனடி பதில்கள்' : 'Instant Responses'}
+                </p>
               </div>
             </div>
           </div>
@@ -175,18 +320,18 @@ const Chatbot: React.FC = () => {
                         : 'bg-gray-100 text-gray-800'
                     }`}
                   >
-                    <p className="text-sm whitespace-pre-line">{message.text}</p>
+                    <p className="text-sm whitespace-pre-line leading-relaxed">{message.text}</p>
                   </div>
                 </div>
 
-                {/* Related Diseases */}
+                {/* Related Diseases with expandable details */}
                 {message.sender === 'bot' && message.relatedDiseases && message.relatedDiseases.length > 0 && (
                   <div className="ml-0 mt-2">
                     <p className="text-xs text-gray-600 mb-2 font-medium">
-                      {language === 'ta' ? 'தொடர்புடைய நோய்கள்:' : 'Related Diseases:'}
+                      {language === 'ta' ? '🔍 தொடர்புடைய நோய்கள்:' : '🔍 Related Diseases:'}
                     </p>
                     {message.relatedDiseases.map((disease) => (
-                      <DiseasePreview key={disease.id} disease={disease} />
+                      <DiseasePreview key={disease.id} disease={disease} messageId={message.id} />
                     ))}
                   </div>
                 )}
@@ -195,14 +340,14 @@ const Chatbot: React.FC = () => {
                 {message.sender === 'bot' && message.suggestions && message.suggestions.length > 0 && (
                   <div className="ml-0 mt-3">
                     <p className="text-xs text-gray-600 mb-2 font-medium">
-                      {language === 'ta' ? 'பரிந்துரைகள்:' : 'Suggestions:'}
+                      {language === 'ta' ? '💡 பரிந்துரைகள்:' : '💡 Suggestions:'}
                     </p>
                     <div className="flex flex-wrap gap-2">
                       {message.suggestions.map((suggestion, index) => (
                         <button
                           key={index}
                           onClick={() => handleSuggestionClick(suggestion)}
-                          className="bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs border border-blue-200 transition-colors duration-200"
+                          className="bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs border border-blue-200 transition-all duration-200 hover:scale-105"
                         >
                           {suggestion}
                         </button>
@@ -213,7 +358,7 @@ const Chatbot: React.FC = () => {
               </div>
             ))}
 
-            {/* Typing Indicator */}
+            {/* Typing Indicator - Faster animation */}
             {isTyping && (
               <div className="flex justify-start">
                 <div className="bg-gray-100 px-4 py-2 rounded-lg">
@@ -251,8 +396,8 @@ const Chatbot: React.FC = () => {
             </div>
             <p className="text-xs text-gray-500 mt-2 text-center">
               {language === 'ta' 
-                ? 'AI மூலம் இயக்கப்படுகிறது • கல்வி நோக்கங்களுக்காக மட்டுமே'
-                : 'Powered by AI • For educational purposes only'
+                ? 'கல்வி நோக்கங்களுக்காக மட்டுமே • எப்போதும் கால்நடை மருத்துவரை அணுகவும்'
+                : 'For educational purposes only • Always consult a veterinarian'
               }
             </p>
           </div>
