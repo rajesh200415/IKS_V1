@@ -48,10 +48,9 @@ const translations = {
     'card.severity.low': 'Low',
     
     // Chatbot
-    'chat.title': 'VetCare Assistant',
-    'chat.welcome': "Hello! I'm your VetCare assistant. I can help you with animal health questions. What would you like to know?",
-    'chat.response': 'Thank you for your question! For detailed medical advice, please consult with a veterinarian. I can help you search for disease information using the search feature above.',
-    'chat.placeholder': 'Type your message...',
+    'chat.title': 'VetCare AI Assistant',
+    'chat.welcome': "Hello! I'm your intelligent VetCare AI assistant. I can help you find information about animal diseases, symptoms, and treatments. Ask me anything about livestock health!\n\nTry asking: 'What causes fever in cattle?' or 'How to treat milk reduction?'",
+    'chat.placeholder': 'Ask about symptoms, diseases, or treatments...',
     
     // Footer
     'footer.about': 'About VetCare',
@@ -109,10 +108,9 @@ const translations = {
     'card.severity.low': 'குறைவு',
     
     // Chatbot
-    'chat.title': 'வெட்கேர் உதவியாளர்',
-    'chat.welcome': 'வணக்கம்! நான் உங்கள் வெட்கேர் உதவியாளர். விலங்கு நல கேள்விகளில் உங்களுக்கு உதவ முடியும். நீங்கள் என்ன தெரிந்து கொள்ள விரும்புகிறீர்கள்?',
-    'chat.response': 'உங்கள் கேள்விக்கு நன்றி! விரிவான மருத்துவ ஆலோசனைக்கு, தயவுசெய்து ஒரு கால்நடை மருத்துவரை அணுகவும். மேலே உள்ள தேடல் அம்சத்தைப் பயன்படுத்தி நோய் தகவல்களைத் தேட உங்களுக்கு உதவ முடியும்.',
-    'chat.placeholder': 'உங்கள் செய்தியை தட்டச்சு செய்யுங்கள்...',
+    'chat.title': 'வெட்கேர் AI உதவியாளர்',
+    'chat.welcome': 'வணக்கம்! நான் உங்கள் அறிவார்ந்த வெட்கேர் AI உதவியாளர். விலங்கு நோய்கள், அறிகுறிகள் மற்றும் சிகிச்சைகள் பற்றிய தகவல்களைக் கண்டறிய உங்களுக்கு உதவ முடியும். கால்நடை நலன் பற்றி எதையும் கேளுங்கள்!\n\nஇவற்றைக் கேட்டு பாருங்கள்: \'மாட்டில் காய்ச்சலுக்கு என்ன காரணம்?\' அல்லது \'பால் குறைவை எப்படி சிகிச்சை செய்வது?\'',
+    'chat.placeholder': 'அறிகுறிகள், நோய்கள் அல்லது சிகிச்சைகளைப் பற்றி கேளுங்கள்...',
     
     // Footer
     'footer.about': 'வெட்கேர் பற்றி',
