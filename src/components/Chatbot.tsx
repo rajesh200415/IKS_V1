@@ -1,12 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageCircle, X, Send, Bot, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
+import { MessageCircle, X, Send, Bot, ChevronDown, ChevronUp, ExternalLink, Cpu, Zap } from 'lucide-react';
 import { ChatMessage, Disease } from '../types';
 import { useLanguage } from '../contexts/LanguageContext';
-import { vetCareAI, ChatResponse } from '../utils/aiChatbot';
+import { enhancedVetCareAI, EnhancedChatResponse } from '../utils/enhancedAiChatbot';
 
 interface EnhancedChatMessage extends ChatMessage {
   relatedDiseases?: Disease[];
   suggestions?: string[];
+  confidence?: number;
+  isAiGenerated?: boolean;
 }
 
 const Chatbot: React.FC = () => {
@@ -18,6 +20,8 @@ const Chatbot: React.FC = () => {
       text: t('chat.welcome'),
       sender: 'bot',
       timestamp: new Date(),
+      confidence: 1.0,
+      isAiGenerated: true,
       suggestions: language === 'ta' 
         ? ['மாட்டில் காய்ச்சல் அறிகுறிகள்', 'எருமையின் பால் குறைவு', 'கால்நடை தடுப்பூசி']
         : ['Fever symptoms in cattle', 'Milk reduction in buffaloes', 'Livestock vaccination']
@@ -41,9 +45,13 @@ const Chatbot: React.FC = () => {
     setMessages([
       {
         id: '1',
-        text: t('chat.welcome'),
+        text: language === 'ta' 
+          ? 'வணக்கம்! 🙏 நான் உங்கள் AI-powered வெட்கேர் உதவியாளர். விலங்கு நல கேள்விகளில் உங்களுக்கு உதவ தயாராக இருக்கிறேன்.\n\n🤖 **AI திறன்கள்:**\n• BioBERT மாடல் பயன்படுத்தி அறிவார்ந்த பதில்கள்\n• அறிகுறிகள் அடையாளம் காணுதல்\n• நோய் தகவல்கள்\n• சிகிச்சை முறைகள்\n• தடுப்பு நடவடிக்கைகள்\n\nஎனக்கு எதையும் கேளுங்கள்!'
+          : 'Hello! 🙏 I\'m your AI-powered VetCare assistant, ready to help with animal health questions.\n\n🤖 **AI Capabilities:**\n• Intelligent responses using BioBERT model\n• Symptom identification\n• Disease information\n• Treatment methods\n• Prevention measures\n\nAsk me anything!',
         sender: 'bot',
         timestamp: new Date(),
+        confidence: 1.0,
+        isAiGenerated: true,
         suggestions: language === 'ta' 
           ? ['மாட்டில் காய்ச்சல் அறிகுறிகள்', 'எருமையின் பால் குறைவு', 'கால்நடை தடுப்பூசி']
           : ['Fever symptoms in cattle', 'Milk reduction in buffaloes', 'Livestock vaccination']
@@ -70,8 +78,8 @@ const Chatbot: React.FC = () => {
     // Faster response time for better responsiveness
     await new Promise(resolve => setTimeout(resolve, 300 + Math.random() * 400));
 
-    // Get AI response
-    const aiResponse: ChatResponse = vetCareAI.processQuery(textToSend, language);
+    // Get Enhanced AI response
+    const aiResponse: EnhancedChatResponse = await enhancedVetCareAI.processQuery(textToSend, language);
 
     const botResponse: EnhancedChatMessage = {
       id: (Date.now() + 1).toString(),
@@ -79,7 +87,9 @@ const Chatbot: React.FC = () => {
       sender: 'bot',
       timestamp: new Date(),
       relatedDiseases: aiResponse.relatedDiseases,
-      suggestions: aiResponse.suggestions
+      suggestions: aiResponse.suggestions,
+      confidence: aiResponse.confidence,
+      isAiGenerated: aiResponse.isAiGenerated
     };
 
     setMessages(prev => [...prev, botResponse]);
@@ -282,8 +292,12 @@ const Chatbot: React.FC = () => {
       {/* Chat Button - Removed AI indicator */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-6 right-6 bg-gradient-to-r from-green-600 to-green-700 text-white p-4 rounded-full shadow-lg hover:from-green-700 hover:to-green-800 transform hover:scale-110 transition-all duration-200 z-50"
+        className="fixed bottom-6 right-6 bg-gradient-to-r from-green-600 to-green-700 text-white p-4 rounded-full shadow-lg hover:from-green-700 hover:to-green-800 transform hover:scale-110 transition-all duration-200 z-50 relative"
       >
+        {/* AI Indicator */}
+        <div className="absolute -top-2 -right-2 bg-blue-500 text-white text-xs px-2 py-1 rounded-full font-bold shadow-lg">
+          AI
+        </div>
         {isOpen ? <X size={24} /> : <MessageCircle size={24} />}
       </button>
 
@@ -294,13 +308,18 @@ const Chatbot: React.FC = () => {
           <div className="bg-gradient-to-r from-green-600 to-green-700 text-white p-4 rounded-t-lg flex-shrink-0">
             <div className="flex items-center space-x-2">
               <div className="relative">
-                <Bot size={20} />
-                <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+                <div className="flex items-center space-x-1">
+                  <Bot size={20} />
+                  <Cpu size={16} className="text-green-200" />
+                </div>
+                <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-400 rounded-full animate-pulse"></div>
               </div>
               <div>
-                <h3 className="font-semibold">{t('chat.title')}</h3>
+                <h3 className="font-semibold">
+                  {language === 'ta' ? 'AI வெட்கேர் உதவியாளர்' : 'AI VetCare Assistant'}
+                </h3>
                 <p className="text-xs text-green-100">
-                  {language === 'ta' ? 'உடனடி பதில்கள்' : 'Instant Responses'}
+                  {language === 'ta' ? 'BioBERT AI மாடல்' : 'BioBERT AI Model'}
                 </p>
               </div>
             </div>
@@ -314,13 +333,41 @@ const Chatbot: React.FC = () => {
                   className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`max-w-xs px-4 py-2 rounded-lg ${
+                    className={`max-w-xs px-4 py-2 rounded-lg relative ${
                       message.sender === 'user'
                         ? 'bg-green-600 text-white'
                         : 'bg-gray-100 text-gray-800'
                     }`}
                   >
                     <p className="text-sm whitespace-pre-line leading-relaxed">{message.text}</p>
+                    
+                    {/* AI Confidence Indicator */}
+                    {message.sender === 'bot' && message.confidence !== undefined && (
+                      <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-200">
+                        <div className="flex items-center space-x-1">
+                          {message.isAiGenerated ? (
+                            <Zap size={12} className="text-blue-500" />
+                          ) : (
+                            <Bot size={12} className="text-gray-500" />
+                          )}
+                          <span className="text-xs text-gray-500">
+                            {message.isAiGenerated ? 
+                              (language === 'ta' ? 'AI பதில்' : 'AI Response') : 
+                              (language === 'ta' ? 'பாரம்பரிய' : 'Traditional')
+                            }
+                          </span>
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          <div className={`w-2 h-2 rounded-full ${
+                            message.confidence > 0.7 ? 'bg-green-500' :
+                            message.confidence > 0.4 ? 'bg-yellow-500' : 'bg-red-500'
+                          }`}></div>
+                          <span className="text-xs text-gray-500">
+                            {Math.round(message.confidence * 100)}%
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -396,8 +443,8 @@ const Chatbot: React.FC = () => {
             </div>
             <p className="text-xs text-gray-500 mt-2 text-center">
               {language === 'ta' 
-                ? 'கல்வி நோக்கங்களுக்காக மட்டுமே • எப்போதும் கால்நடை மருத்துவரை அணுகவும்'
-                : 'For educational purposes only • Always consult a veterinarian'
+               ? 'AI-powered • கல்வி நோக்கங்களுக்காக மட்டுமே • எப்போதும் கால்நடை மருத்துவரை அணுகவும்'
+               : 'AI-powered • For educational purposes only • Always consult a veterinarian'
               }
             </p>
           </div>
