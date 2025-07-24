@@ -9,6 +9,7 @@ interface EnhancedChatMessage extends ChatMessage {
   suggestions?: string[];
   confidence?: number;
   isAiGenerated?: boolean;
+  modelStatus?: string;
 }
 
 const Chatbot: React.FC = () => {
@@ -89,7 +90,8 @@ const Chatbot: React.FC = () => {
       relatedDiseases: aiResponse.relatedDiseases,
       suggestions: aiResponse.suggestions,
       confidence: aiResponse.confidence,
-      isAiGenerated: aiResponse.isAiGenerated
+      isAiGenerated: aiResponse.isAiGenerated,
+      modelStatus: aiResponse.modelStatus
     };
 
     setMessages(prev => [...prev, botResponse]);
@@ -289,10 +291,10 @@ const Chatbot: React.FC = () => {
 
   return (
     <>
-      {/* Chat Button - Removed AI indicator */}
+      {/* Chat Button - Fixed positioning */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-6 right-6 bg-gradient-to-r from-green-600 to-green-700 text-white p-4 rounded-full shadow-lg hover:from-green-700 hover:to-green-800 transform hover:scale-110 transition-all duration-200 z-50 relative"
+        className="fixed bottom-6 right-6 bg-gradient-to-r from-green-600 to-green-700 text-white p-4 rounded-full shadow-lg hover:from-green-700 hover:to-green-800 transform hover:scale-110 transition-all duration-200 z-[9999] relative"
       >
         {/* AI Indicator */}
         <div className="absolute -top-2 -right-2 bg-blue-500 text-white text-xs px-2 py-1 rounded-full font-bold shadow-lg">
@@ -303,7 +305,7 @@ const Chatbot: React.FC = () => {
 
       {/* Chat Window */}
       {isOpen && (
-        <div className="fixed bottom-24 right-6 w-80 md:w-96 bg-white rounded-lg shadow-2xl border border-gray-200 z-50 max-h-[75vh] flex flex-col">
+        <div className="fixed bottom-24 right-6 w-80 md:w-96 bg-white rounded-lg shadow-2xl border border-gray-200 z-[9998] max-h-[75vh] flex flex-col">
           {/* Header */}
           <div className="bg-gradient-to-r from-green-600 to-green-700 text-white p-4 rounded-t-lg flex-shrink-0">
             <div className="flex items-center space-x-2">
@@ -351,10 +353,10 @@ const Chatbot: React.FC = () => {
                             <Bot size={12} className="text-gray-500" />
                           )}
                           <span className="text-xs text-gray-500">
-                            {message.isAiGenerated ? 
+                            {message.modelStatus || (message.isAiGenerated ? 
                               (language === 'ta' ? 'AI பதில்' : 'AI Response') : 
                               (language === 'ta' ? 'பாரம்பரிய' : 'Traditional')
-                            }
+                            )}
                           </span>
                         </div>
                         <div className="flex items-center space-x-1">

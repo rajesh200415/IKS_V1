@@ -8,17 +8,30 @@ export interface BioBertResponse {
 
 class BioBertModel {
   private questionAnsweringPipeline: Pipeline | null = null;
-  private textGenerationPipeline: Pipeline | null = null;
   private isInitialized = false;
   private initializationPromise: Promise<void> | null = null;
+  private isLoading = false;
 
   constructor() {
-    this.initializeModel();
+    // Don't auto-initialize, wait for first use
   }
 
   private async initializeModel(): Promise<void> {
     if (this.initializationPromise) {
       return this.initializationPromise;
+    }
+
+    if (this.isLoading) {
+      return new Promise((resolve) => {
+        const checkLoading = () => {
+          if (!this.isLoading) {
+            resolve();
+          } else {
+            setTimeout(checkLoading, 100);
+          }
+        };
+        checkLoading();
+      });
     }
 
     this.initializationPromise = this.loadModels();
@@ -27,40 +40,55 @@ class BioBertModel {
 
   private async loadModels(): Promise<void> {
     try {
-      console.log('Loading BioBERT models...');
+      this.isLoading = true;
+      console.log('Loading AI models...');
       
-      // Load question-answering pipeline with BioBERT-based model
+      // Use a lighter, more reliable model for question-answering
       this.questionAnsweringPipeline = await pipeline(
         'question-answering',
         'Xenova/distilbert-base-cased-distilled-squad',
         {
-          revision: 'main',
-          quantized: true, // Use quantized version for better performance
-        }
-      );
-
-      // Load text generation pipeline for more complex responses
-      this.textGenerationPipeline = await pipeline(
-        'text-generation',
-        'Xenova/distilgpt2',
-        {
-          revision: 'main',
           quantized: true,
+          progress_callback: (progress: any) => {
+            if (progress.status === 'downloading') {
+              console.log(`Downloading model: ${Math.round(progress.progress || 0)}%`);
+            }
+          }
         }
       );
 
       this.isInitialized = true;
-      console.log('BioBERT models loaded successfully');
+      this.isLoading = false;
+      console.log('AI models loaded successfully');
     } catch (error) {
-      console.error('Error loading BioBERT models:', error);
+      console.error('Error loading AI models:', error);
       this.isInitialized = false;
+      this.isLoading = false;
+      // Don't throw error, allow fallback
     }
   }
 
   public async isReady(): Promise<boolean> {
-    if (!this.isInitialized && this.initializationPromise) {
-      await this.initializationPromise;
+    if (this.isLoading) {
+      return false;
     }
+    
+    if (!this.isInitialized && !this.initializationPromise) {
+      // Start initialization on first check
+      this.initializeModel().catch(() => {
+        // Ignore errors, will use fallback
+      });
+      return false;
+    }
+    
+    if (this.initializationPromise && !this.isInitialized) {
+      try {
+        await this.initializationPromise;
+      } catch {
+        // Ignore errors, will use fallback
+      }
+    }
+    
     return this.isInitialized;
   }
 
@@ -70,112 +98,67 @@ class BioBertModel {
     language: 'en' | 'ta' = 'en'
   ): Promise<BioBertResponse> {
     try {
-      await this.ensureInitialized();
-
-      if (!this.questionAnsweringPipeline) {
-        throw new Error('Question-answering pipeline not initialized');
+      // Check if model is ready
+      const modelReady = await this.isReady();
+      
+      if (!modelReady || !this.questionAnsweringPipeline) {
+        throw new Error('AI model not ready');
       }
 
-      // For Tamil questions, we'll translate context but keep the processing in English
+      // For Tamil questions, translate key terms to English for better processing
       const processedQuestion = language === 'ta' ? 
-        await this.translateTamilToEnglish(question) : question;
+        this.translateTamilKeywords(question) : question;
 
-      const result = await this.questionAnsweringPipeline(processedQuestion, context);
+      // Limit context length to avoid memory issues
+      const limitedContext = context.length > 1000 ? 
+        context.substring(0, 1000) + '...' : context;
 
-      let answer = result.answer;
-      const confidence = result.score;
+      const result = await this.questionAnsweringPipeline(processedQuestion, limitedContext);
 
-      // If confidence is low, try to generate a more comprehensive answer
-      if (confidence < 0.3) {
-        answer = await this.generateContextualAnswer(processedQuestion, context);
+      let answer = result.answer || 'No specific answer found.';
+      const confidence = result.score || 0;
+
+      // If confidence is very low, provide a more general response
+      if (confidence < 0.1) {
+        answer = this.generateFallbackAnswer(processedQuestion, limitedContext, language);
       }
 
       // Translate back to Tamil if needed
-      if (language === 'ta') {
-        answer = await this.translateEnglishToTamil(answer);
+      if (language === 'ta' && answer !== 'No specific answer found.') {
+        answer = this.translateEnglishKeywords(answer);
       }
 
       return {
         answer,
-        confidence,
-        context: result.context || context.substring(0, 200) + '...'
+        confidence: Math.max(confidence, 0.3), // Minimum confidence for user feedback
+        context: limitedContext.substring(0, 200) + '...'
       };
     } catch (error) {
-      console.error('Error in BioBERT question answering:', error);
+      console.error('Error in AI question answering:', error);
+      
+      // Provide intelligent fallback response
+      const fallbackAnswer = this.generateFallbackAnswer(question, context, language);
+      
       return {
-        answer: language === 'ta' ? 
-          'மன்னிக்கவும், தற்போது AI மாடல் கிடைக்கவில்லை. பாரம்பரிய தேடல் முறையைப் பயன்படுத்துகிறேன்.' :
-          'Sorry, AI model is currently unavailable. Using traditional search method.',
-        confidence: 0,
+        answer: fallbackAnswer,
+        confidence: 0.2, // Low confidence to indicate fallback
       };
     }
   }
 
-  public async generateResponse(
-    prompt: string,
-    maxLength: number = 150,
-    language: 'en' | 'ta' = 'en'
-  ): Promise<string> {
-    try {
-      await this.ensureInitialized();
-
-      if (!this.textGenerationPipeline) {
-        throw new Error('Text generation pipeline not initialized');
-      }
-
-      const processedPrompt = language === 'ta' ? 
-        await this.translateTamilToEnglish(prompt) : prompt;
-
-      const result = await this.textGenerationPipeline(processedPrompt, {
-        max_length: maxLength,
-        num_return_sequences: 1,
-        temperature: 0.7,
-        do_sample: true,
-        pad_token_id: 50256,
-      });
-
-      let generatedText = result[0].generated_text;
-      
-      // Clean up the generated text
-      generatedText = generatedText.replace(processedPrompt, '').trim();
-      
-      // Translate back to Tamil if needed
-      if (language === 'ta') {
-        generatedText = await this.translateEnglishToTamil(generatedText);
-      }
-
-      return generatedText;
-    } catch (error) {
-      console.error('Error in text generation:', error);
-      return language === 'ta' ? 
-        'மன்னிக்கவும், பதில் உருவாக்குவதில் சிக்கல்.' :
-        'Sorry, there was an issue generating the response.';
+  private generateFallbackAnswer(question: string, context: string, language: 'en' | 'ta'): string {
+    // Extract key information from context for a meaningful response
+    const contextLines = context.split('\n').filter(line => line.trim());
+    const relevantInfo = contextLines.slice(0, 3).join(' ');
+    
+    if (language === 'ta') {
+      return `உங்கள் கேள்விக்கு தொடர்புடைய தகவல்: ${relevantInfo}. மேலும் விரிவான தகவல்களுக்கு கால்நடை மருத்துவரை அணுகவும்.`;
+    } else {
+      return `Based on the available information: ${relevantInfo}. For detailed guidance, please consult with a veterinarian.`;
     }
   }
 
-  private async ensureInitialized(): Promise<void> {
-    if (!this.isInitialized) {
-      await this.initializeModel();
-    }
-    if (!this.isInitialized) {
-      throw new Error('BioBERT model failed to initialize');
-    }
-  }
-
-  private async generateContextualAnswer(question: string, context: string): Promise<string> {
-    try {
-      const prompt = `Based on the veterinary context: "${context.substring(0, 300)}", answer this question: "${question}". Provide a helpful and accurate response about animal health.`;
-      
-      return await this.generateResponse(prompt, 200, 'en');
-    } catch (error) {
-      console.error('Error generating contextual answer:', error);
-      return 'I apologize, but I cannot provide a detailed answer at this time. Please consult with a veterinarian for accurate information.';
-    }
-  }
-
-  // Simple translation helpers (in a real implementation, you'd use a proper translation service)
-  private async translateTamilToEnglish(text: string): Promise<string> {
-    // Basic keyword translation for common veterinary terms
+  private translateTamilKeywords(text: string): string {
     const tamilToEnglish: { [key: string]: string } = {
       'காய்ச்சல்': 'fever',
       'வயிற்றுப்போக்கு': 'diarrhea',
@@ -192,6 +175,8 @@ class BioBertModel {
       'என்ன': 'what',
       'எப்படி': 'how',
       'ஏன்': 'why',
+      'எங்கே': 'where',
+      'எப்போது': 'when'
     };
 
     let translatedText = text;
@@ -202,8 +187,7 @@ class BioBertModel {
     return translatedText;
   }
 
-  private async translateEnglishToTamil(text: string): Promise<string> {
-    // Basic keyword translation for common veterinary terms
+  private translateEnglishKeywords(text: string): string {
     const englishToTamil: { [key: string]: string } = {
       'fever': 'காய்ச்சல்',
       'diarrhea': 'வயிற்றுப்போக்கு',
@@ -219,7 +203,7 @@ class BioBertModel {
       'swelling': 'வீக்கம்',
       'what': 'என்ன',
       'how': 'எப்படி',
-      'why': 'ஏன',
+      'why': 'ஏன்'
     };
 
     let translatedText = text;
@@ -235,7 +219,8 @@ class BioBertModel {
     const medicalTerms = [
       'fever', 'diarrhea', 'cough', 'swelling', 'infection', 'inflammation',
       'cattle', 'buffalo', 'livestock', 'animal', 'veterinary', 'treatment',
-      'medicine', 'dosage', 'symptoms', 'diagnosis', 'therapy', 'vaccination'
+      'medicine', 'dosage', 'symptoms', 'diagnosis', 'therapy', 'vaccination',
+      'milk', 'udder', 'mastitis', 'lameness', 'respiratory', 'digestive'
     ];
 
     const foundEntities = medicalTerms.filter(term => 
@@ -243,6 +228,13 @@ class BioBertModel {
     );
 
     return [...new Set(foundEntities)];
+  }
+
+  public getModelStatus(): { isReady: boolean; isLoading: boolean } {
+    return {
+      isReady: this.isInitialized,
+      isLoading: this.isLoading
+    };
   }
 }
 

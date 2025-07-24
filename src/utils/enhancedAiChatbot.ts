@@ -8,25 +8,14 @@ export interface EnhancedChatResponse {
   suggestions?: string[];
   confidence?: number;
   isAiGenerated?: boolean;
+  modelStatus?: string;
 }
 
 class EnhancedVetCareAI {
   private diseases: Disease[];
-  private isModelReady = false;
 
   constructor(diseases: Disease[]) {
     this.diseases = diseases;
-    this.initializeModel();
-  }
-
-  private async initializeModel(): Promise<void> {
-    try {
-      this.isModelReady = await bioBertModel.isReady();
-      console.log('Enhanced AI chatbot initialized:', this.isModelReady);
-    } catch (error) {
-      console.error('Failed to initialize AI model:', error);
-      this.isModelReady = false;
-    }
   }
 
   private buildVeterinaryContext(relatedDiseases: Disease[], language: 'en' | 'ta'): string {
@@ -43,18 +32,18 @@ class EnhancedVetCareAI {
         context += `நோய் ${index + 1}: ${disease.nameTa || disease.name}\n`;
         context += `அறிகுறிகள்: ${(disease.symptomsTa || disease.symptoms).join(', ')}\n`;
         context += `சிகிச்சை: ${disease.treatmentNameTa || disease.treatmentName}\n`;
-        context += `பொருட்கள்: ${(disease.ingredientsTa || disease.ingredients).join(', ')}\n`;
-        context += `தயாரிப்பு: ${disease.preparationTa || disease.preparation}\n`;
-        context += `அளவு: ${disease.dosageTa || disease.dosage}\n`;
+        context += `பொருட்கள்: ${(disease.ingredientsTa || disease.ingredients).slice(0, 3).join(', ')}\n`;
+        context += `தயாரிப்பு: ${(disease.preparationTa || disease.preparation).substring(0, 200)}\n`;
+        context += `அளவு: ${(disease.dosageTa || disease.dosage).substring(0, 150)}\n`;
         context += `தீவிரத்தன்மை: ${disease.severity}\n`;
         context += `பாதிக்கும் விலங்குகள்: ${disease.affectedAnimals.join(', ')}\n\n`;
       } else {
         context += `Disease ${index + 1}: ${disease.name}\n`;
         context += `Symptoms: ${disease.symptoms.join(', ')}\n`;
         context += `Treatment: ${disease.treatmentName}\n`;
-        context += `Ingredients: ${disease.ingredients.join(', ')}\n`;
-        context += `Preparation: ${disease.preparation}\n`;
-        context += `Dosage: ${disease.dosage}\n`;
+        context += `Ingredients: ${disease.ingredients.slice(0, 3).join(', ')}\n`;
+        context += `Preparation: ${disease.preparation.substring(0, 200)}\n`;
+        context += `Dosage: ${disease.dosage.substring(0, 150)}\n`;
         context += `Severity: ${disease.severity}\n`;
         context += `Affected Animals: ${disease.affectedAnimals.join(', ')}\n\n`;
       }
@@ -132,7 +121,7 @@ class EnhancedVetCareAI {
     return texts.join(' ');
   }
 
-  private generateFallbackResponse(query: string, relatedDiseases: Disease[], language: 'en' | 'ta'): string {
+  private generateIntelligentResponse(query: string, relatedDiseases: Disease[], language: 'en' | 'ta'): string {
     if (relatedDiseases.length === 0) {
       return language === 'ta'
         ? `"${query}" பற்றிய குறிப்பிட்ட தகவல் தற்போது கிடைக்கவில்லை. தயவுசெய்து:\n\n• மேலே உள்ள தேடல் அம்சத்தைப் பயன்படுத்துங்கள்\n• வேறு வார்த்தைகளில் கேள்வியைக் கேளுங்கள்\n• அறிகுறிகளை விரிவாக விவரிக்கவும்`
@@ -145,19 +134,49 @@ class EnhancedVetCareAI {
 
     const primaryDisease = relatedDiseases[0];
     
+    // Generate contextual response based on query intent
+    const queryLower = query.toLowerCase();
+    let response = '';
+    
     if (language === 'ta') {
-      return `உங்கள் கேள்விக்கு தொடர்புடைய நோய்: **${diseaseNames[0]}**\n\n` +
-             `🔍 **முக்கிய அறிகுறிகள்:** ${(primaryDisease.symptomsTa || primaryDisease.symptoms).slice(0, 3).join(', ')}\n` +
-             `💊 **சிகிச்சை:** ${primaryDisease.treatmentNameTa || primaryDisease.treatmentName}\n` +
-             `⚡ **தீவிரத்தன்மை:** ${primaryDisease.severity === 'High' ? 'அதிகம்' : primaryDisease.severity === 'Medium' ? 'நடுத்தரம்' : 'குறைவு'}\n\n` +
-             `மேலும் விரிவான தகவல்களுக்கு கீழே உள்ள நோய் அட்டைகளைப் பார்க்கவும்.`;
+      if (queryLower.includes('சிகிச்சை') || queryLower.includes('மருந்து')) {
+        response = `**${diseaseNames[0]}** நோய்க்கான சிகிச்சை:\n\n`;
+        response += `💊 **சிகிச்சை முறை:** ${primaryDisease.treatmentNameTa || primaryDisease.treatmentName}\n`;
+        response += `🌿 **முக்கிய பொருட்கள்:** ${(primaryDisease.ingredientsTa || primaryDisease.ingredients).slice(0, 3).join(', ')}\n`;
+        response += `📋 **தயாரிப்பு:** ${(primaryDisease.preparationTa || primaryDisease.preparation).substring(0, 150)}...\n`;
+        response += `⚡ **அளவு:** ${(primaryDisease.dosageTa || primaryDisease.dosage).substring(0, 100)}...`;
+      } else if (queryLower.includes('அறிகுறி')) {
+        response = `**${diseaseNames[0]}** நோயின் அறிகுறிகள்:\n\n`;
+        response += `🔍 **முக்கிய அறிகுறிகள்:** ${(primaryDisease.symptomsTa || primaryDisease.symptoms).slice(0, 4).join(', ')}\n`;
+        response += `⚠️ **தீவிரத்தன்மை:** ${primaryDisease.severity === 'High' ? 'அதிகம்' : primaryDisease.severity === 'Medium' ? 'நடுத்தரம்' : 'குறைவு'}\n`;
+        response += `🐄 **பாதிக்கும் விலங்குகள்:** ${primaryDisease.affectedAnimals.map(a => a === 'Cattle' ? 'மாடுகள்' : 'எருமைகள்').join(', ')}`;
+      } else {
+        response = `**${diseaseNames[0]}** பற்றிய தகவல்:\n\n`;
+        response += `🔍 **அறிகுறிகள்:** ${(primaryDisease.symptomsTa || primaryDisease.symptoms).slice(0, 3).join(', ')}\n`;
+        response += `💊 **சிகிச்சை:** ${primaryDisease.treatmentNameTa || primaryDisease.treatmentName}\n`;
+        response += `⚠️ **தீவிரத்தன்மை:** ${primaryDisease.severity === 'High' ? 'அதிகம்' : primaryDisease.severity === 'Medium' ? 'நடுத்தரம்' : 'குறைவு'}`;
+      }
     } else {
-      return `Related disease for your query: **${diseaseNames[0]}**\n\n` +
-             `🔍 **Key Symptoms:** ${primaryDisease.symptoms.slice(0, 3).join(', ')}\n` +
-             `💊 **Treatment:** ${primaryDisease.treatmentName}\n` +
-             `⚡ **Severity:** ${primaryDisease.severity}\n\n` +
-             `See the disease cards below for more detailed information.`;
+      if (queryLower.includes('treatment') || queryLower.includes('cure') || queryLower.includes('medicine')) {
+        response = `**Treatment for ${diseaseNames[0]}:**\n\n`;
+        response += `💊 **Treatment Method:** ${primaryDisease.treatmentName}\n`;
+        response += `🌿 **Key Ingredients:** ${primaryDisease.ingredients.slice(0, 3).join(', ')}\n`;
+        response += `📋 **Preparation:** ${primaryDisease.preparation.substring(0, 150)}...\n`;
+        response += `⚡ **Dosage:** ${primaryDisease.dosage.substring(0, 100)}...`;
+      } else if (queryLower.includes('symptom') || queryLower.includes('sign')) {
+        response = `**Symptoms of ${diseaseNames[0]}:**\n\n`;
+        response += `🔍 **Key Symptoms:** ${primaryDisease.symptoms.slice(0, 4).join(', ')}\n`;
+        response += `⚠️ **Severity:** ${primaryDisease.severity}\n`;
+        response += `🐄 **Affects:** ${primaryDisease.affectedAnimals.join(', ')}`;
+      } else {
+        response = `**Information about ${diseaseNames[0]}:**\n\n`;
+        response += `🔍 **Symptoms:** ${primaryDisease.symptoms.slice(0, 3).join(', ')}\n`;
+        response += `💊 **Treatment:** ${primaryDisease.treatmentName}\n`;
+        response += `⚠️ **Severity:** ${primaryDisease.severity}`;
+      }
     }
+    
+    return response;
   }
 
   private generateSuggestions(relatedDiseases: Disease[], language: 'en' | 'ta'): string[] {
@@ -210,36 +229,48 @@ class EnhancedVetCareAI {
       // Find relevant diseases first
       const relatedDiseases = await this.findRelevantDiseases(input, language);
       
-      // Check if AI model is ready
-      if (!this.isModelReady) {
-        console.log('AI model not ready, using fallback response');
-        return {
-          text: this.generateFallbackResponse(input, relatedDiseases, language),
-          relatedDiseases: relatedDiseases.slice(0, 2),
-          suggestions: this.generateSuggestions(relatedDiseases, language),
-          confidence: 0.5,
-          isAiGenerated: false
-        };
-      }
+      // Check AI model status
+      const modelStatus = bioBertModel.getModelStatus();
+      let finalResponse = '';
+      let confidence = 0.5;
+      let isAiGenerated = false;
+      let statusMessage = '';
 
-      // Build context from related diseases
-      const context = this.buildVeterinaryContext(relatedDiseases, language);
-      
-      // Use BioBERT for question answering
-      const bioBertResponse: BioBertResponse = await bioBertModel.answerQuestion(
-        input,
-        context,
-        language
-      );
+      if (modelStatus.isLoading) {
+        statusMessage = language === 'ta' ? 'AI மாடல் ஏற்றுகிறது...' : 'AI model loading...';
+        finalResponse = this.generateIntelligentResponse(input, relatedDiseases, language);
+      } else if (modelStatus.isReady) {
+        try {
+          // Build context from related diseases
+          const context = this.buildVeterinaryContext(relatedDiseases, language);
+          
+          // Use BioBERT for question answering
+          const bioBertResponse: BioBertResponse = await bioBertModel.answerQuestion(
+            input,
+            context,
+            language
+          );
 
-      let finalResponse = bioBertResponse.answer;
-      let confidence = bioBertResponse.confidence;
+          finalResponse = bioBertResponse.answer;
+          confidence = bioBertResponse.confidence;
+          isAiGenerated = true;
+          statusMessage = language === 'ta' ? 'AI மாடல் செயலில்' : 'AI model active';
 
-      // If BioBERT confidence is low, enhance with traditional method
-      if (confidence < 0.4) {
-        const fallbackResponse = this.generateFallbackResponse(input, relatedDiseases, language);
-        finalResponse = `${bioBertResponse.answer}\n\n${fallbackResponse}`;
-        confidence = Math.max(confidence, 0.6);
+          // If AI confidence is low, enhance with traditional method
+          if (confidence < 0.4) {
+            const traditionalResponse = this.generateIntelligentResponse(input, relatedDiseases, language);
+            finalResponse = `${bioBertResponse.answer}\n\n---\n\n${traditionalResponse}`;
+            confidence = Math.max(confidence, 0.6);
+          }
+        } catch (error) {
+          console.error('AI processing error:', error);
+          finalResponse = this.generateIntelligentResponse(input, relatedDiseases, language);
+          statusMessage = language === 'ta' ? 'AI மாடல் பிழை - பாரம்பரிய முறை' : 'AI model error - traditional method';
+        }
+      } else {
+        // Use intelligent traditional method
+        finalResponse = this.generateIntelligentResponse(input, relatedDiseases, language);
+        statusMessage = language === 'ta' ? 'பாரம்பரிய முறை' : 'Traditional method';
       }
 
       // Add medical disclaimer
@@ -252,7 +283,8 @@ class EnhancedVetCareAI {
         relatedDiseases: relatedDiseases.slice(0, 2),
         suggestions: this.generateSuggestions(relatedDiseases, language),
         confidence,
-        isAiGenerated: true
+        isAiGenerated,
+        modelStatus: statusMessage
       };
 
     } catch (error) {
@@ -261,11 +293,12 @@ class EnhancedVetCareAI {
       // Fallback to traditional method
       const relatedDiseases = await this.findRelevantDiseases(input, language);
       return {
-        text: this.generateFallbackResponse(input, relatedDiseases, language),
+        text: this.generateIntelligentResponse(input, relatedDiseases, language),
         relatedDiseases: relatedDiseases.slice(0, 2),
         suggestions: this.generateSuggestions(relatedDiseases, language),
         confidence: 0.3,
-        isAiGenerated: false
+        isAiGenerated: false,
+        modelStatus: language === 'ta' ? 'பிழை - பாரம்பரிய முறை' : 'Error - traditional method'
       };
     }
   }
@@ -280,15 +313,27 @@ class EnhancedVetCareAI {
   }
 
   private generateGreetingResponse(language: 'en' | 'ta'): EnhancedChatResponse {
+    const modelStatus = bioBertModel.getModelStatus();
+    let statusText = '';
+    
+    if (modelStatus.isLoading) {
+      statusText = language === 'ta' ? '\n\n🤖 AI மாடல் ஏற்றுகிறது...' : '\n\n🤖 AI model is loading...';
+    } else if (modelStatus.isReady) {
+      statusText = language === 'ta' ? '\n\n🤖 AI மாடல் தயார்!' : '\n\n🤖 AI model ready!';
+    }
+
     return {
-      text: language === 'ta' 
+      text: (language === 'ta' 
         ? 'வணக்கம்! 🙏 நான் உங்கள் AI-powered வெட்கேர் உதவியாளர். விலங்கு நல கேள்விகளில் உங்களுக்கு உதவ தயாராக இருக்கிறேன்.\n\n🤖 **AI திறன்கள்:**\n• BioBERT மாடல் பயன்படுத்தி அறிவார்ந்த பதில்கள்\n• அறிகுறிகள் அடையாளம் காணுதல்\n• நோய் தகவல்கள்\n• சிகிச்சை முறைகள்\n• தடுப்பு நடவடிக்கைகள்\n\nஎனக்கு எதையும் கேளுங்கள்!'
-        : 'Hello! 🙏 I\'m your AI-powered VetCare assistant, ready to help with animal health questions.\n\n🤖 **AI Capabilities:**\n• Intelligent responses using BioBERT model\n• Symptom identification\n• Disease information\n• Treatment methods\n• Prevention measures\n\nAsk me anything!',
+        : 'Hello! 🙏 I\'m your AI-powered VetCare assistant, ready to help with animal health questions.\n\n🤖 **AI Capabilities:**\n• Intelligent responses using BioBERT model\n• Symptom identification\n• Disease information\n• Treatment methods\n• Prevention measures\n\nAsk me anything!') + statusText,
       suggestions: language === 'ta' 
         ? ['மாட்டில் காய்ச்சல் அறிகுறிகள்', 'எருமையின் பால் குறைவு', 'கால்நடை தடுப்பூசி']
         : ['Fever symptoms in cattle', 'Milk reduction in buffaloes', 'Livestock vaccination'],
       confidence: 1.0,
-      isAiGenerated: true
+      isAiGenerated: true,
+      modelStatus: modelStatus.isLoading ? (language === 'ta' ? 'ஏற்றுகிறது' : 'Loading') : 
+                   modelStatus.isReady ? (language === 'ta' ? 'தயார்' : 'Ready') : 
+                   (language === 'ta' ? 'பாரம்பரிய' : 'Traditional')
     };
   }
 }
