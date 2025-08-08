@@ -221,6 +221,9 @@ class EnhancedVetCareAI {
 
   public async processQuery(input: string, language: 'en' | 'ta' = 'en'): Promise<EnhancedChatResponse> {
     try {
+      console.log('🚀 Processing query:', input);
+      console.log('🌐 Language:', language);
+
       // Handle greetings
       if (this.isGreeting(input, language)) {
         return this.generateGreetingResponse(language);
@@ -231,18 +234,25 @@ class EnhancedVetCareAI {
       
       // Check AI model status
       const modelStatus = bioBertModel.getModelStatus();
+      console.log('🤖 Model status:', modelStatus);
+      
       let finalResponse = '';
       let confidence = 0.5;
       let isAiGenerated = false;
       let statusMessage = '';
 
       if (modelStatus.isLoading) {
-        statusMessage = language === 'ta' ? 'AI மாடல் ஏற்றுகிறது...' : 'AI model loading...';
+        statusMessage = language === 'ta' 
+          ? `AI மாடல் ஏற்றுகிறது... ${modelStatus.progress}%` 
+          : `AI model loading... ${modelStatus.progress}%`;
         finalResponse = this.generateIntelligentResponse(input, relatedDiseases, language);
+        console.log('⏳ Using traditional method while AI loads');
       } else if (modelStatus.isReady) {
         try {
+          console.log('🤖 Using AI model for response');
           // Build context from related diseases
           const context = this.buildVeterinaryContext(relatedDiseases, language);
+          console.log('📄 Built context length:', context.length);
           
           // Use BioBERT for question answering
           const bioBertResponse: BioBertResponse = await bioBertModel.answerQuestion(
@@ -251,6 +261,12 @@ class EnhancedVetCareAI {
             language
           );
 
+          console.log('🤖 BioBERT response:', {
+            answer: bioBertResponse.answer.substring(0, 100) + '...',
+            confidence: bioBertResponse.confidence,
+            debugInfo: bioBertResponse.debugInfo
+          });
+
           finalResponse = bioBertResponse.answer;
           confidence = bioBertResponse.confidence;
           isAiGenerated = true;
@@ -258,20 +274,30 @@ class EnhancedVetCareAI {
 
           // If AI confidence is low, enhance with traditional method
           if (confidence < 0.4) {
+            console.log('⚠️ Low AI confidence, enhancing with traditional method');
             const traditionalResponse = this.generateIntelligentResponse(input, relatedDiseases, language);
-            finalResponse = `${bioBertResponse.answer}\n\n---\n\n${traditionalResponse}`;
+            finalResponse = `${bioBertResponse.answer}\n\n${language === 'ta' ? '**अतिरिक्त जानकारी:**' : '**Additional Information:**'}\n${traditionalResponse}`;
             confidence = Math.max(confidence, 0.6);
           }
         } catch (error) {
           console.error('AI processing error:', error);
           finalResponse = this.generateIntelligentResponse(input, relatedDiseases, language);
           statusMessage = language === 'ta' ? 'AI மாடல் பிழை - பாரம்பரிய முறை' : 'AI model error - traditional method';
+          console.log('❌ Falling back to traditional method due to AI error');
         }
       } else {
+        console.log('🔄 Using traditional method - AI not ready');
         // Use intelligent traditional method
         finalResponse = this.generateIntelligentResponse(input, relatedDiseases, language);
         statusMessage = language === 'ta' ? 'பாரம்பரிய முறை' : 'Traditional method';
       }
+
+      console.log('✅ Final response generated:', {
+        responseLength: finalResponse.length,
+        confidence,
+        isAiGenerated,
+        relatedDiseasesCount: relatedDiseases.length
+      });
 
       // Add medical disclaimer
       const disclaimer = language === 'ta'
@@ -290,6 +316,7 @@ class EnhancedVetCareAI {
     } catch (error) {
       console.error('Error in enhanced AI processing:', error);
       
+      console.log('🔄 Using fallback method due to processing error');
       // Fallback to traditional method
       const relatedDiseases = await this.findRelevantDiseases(input, language);
       return {
@@ -317,9 +344,16 @@ class EnhancedVetCareAI {
     let statusText = '';
     
     if (modelStatus.isLoading) {
-      statusText = language === 'ta' ? '\n\n🤖 AI மாடல் ஏற்றுகிறது...' : '\n\n🤖 AI model is loading...';
+      statusText = language === 'ta' 
+        ? `\n\n🤖 AI மாடல் ஏற்றுகிறது... ${modelStatus.progress}%` 
+        : `\n\n🤖 AI model is loading... ${modelStatus.progress}%`;
     } else if (modelStatus.isReady) {
       statusText = language === 'ta' ? '\n\n🤖 AI மாடல் தயார்!' : '\n\n🤖 AI model ready!';
+      
+      // Warm up the model in the background
+      bioBertModel.warmUp().catch(error => {
+        console.warn('Model warm-up failed:', error);
+      });
     }
 
     return {
@@ -331,7 +365,7 @@ class EnhancedVetCareAI {
         : ['Fever symptoms in cattle', 'Milk reduction in buffaloes', 'Livestock vaccination'],
       confidence: 1.0,
       isAiGenerated: true,
-      modelStatus: modelStatus.isLoading ? (language === 'ta' ? 'ஏற்றுகிறது' : 'Loading') : 
+      modelStatus: modelStatus.isLoading ? (language === 'ta' ? `ஏற்றுகிறது ${modelStatus.progress}%` : `Loading ${modelStatus.progress}%`) : 
                    modelStatus.isReady ? (language === 'ta' ? 'தயார்' : 'Ready') : 
                    (language === 'ta' ? 'பாரம்பரிய' : 'Traditional')
     };
