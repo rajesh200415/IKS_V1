@@ -1,5 +1,5 @@
 import { Disease } from '../types';
-import { mockDiseases } from '../data/mockData';
+import { apiService } from '../services/api';
 import { bioBertModel, BioBertResponse } from './bioBertModel';
 
 export interface EnhancedChatResponse {
@@ -12,10 +12,36 @@ export interface EnhancedChatResponse {
 }
 
 class EnhancedVetCareAI {
-  private diseases: Disease[];
+  private diseasesCache: Disease[] = [];
+  private lastCacheUpdate: number = 0;
+  private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
-  constructor(diseases: Disease[]) {
-    this.diseases = diseases;
+  constructor() {
+    // Initialize with empty cache
+    this.loadDiseases();
+  }
+
+  private async loadDiseases(language: 'en' | 'ta' = 'en'): Promise<Disease[]> {
+    try {
+      // Check if cache is still valid
+      const now = Date.now();
+      if (this.diseasesCache.length > 0 && (now - this.lastCacheUpdate) < this.CACHE_DURATION) {
+        return this.diseasesCache;
+      }
+
+      console.log('🔄 Loading diseases from API...');
+      const diseases = await apiService.getDiseases({ language, limit: 100 });
+      
+      this.diseasesCache = diseases;
+      this.lastCacheUpdate = now;
+      
+      console.log(`✅ Loaded ${diseases.length} diseases into cache`);
+      return diseases;
+    } catch (error) {
+      console.error('❌ Error loading diseases:', error);
+      // Return cached data if available, otherwise empty array
+      return this.diseasesCache;
+    }
   }
 
   private buildVeterinaryContext(relatedDiseases: Disease[], language: 'en' | 'ta'): string {
@@ -53,9 +79,12 @@ class EnhancedVetCareAI {
   }
 
   private async findRelevantDiseases(query: string, language: 'en' | 'ta'): Promise<Disease[]> {
+    // Load fresh diseases data
+    const diseases = await this.loadDiseases(language);
+    
     const keywords = this.extractKeywords(query, language);
     
-    const scoredDiseases = this.diseases
+    const scoredDiseases = diseases
       .map(disease => ({
         disease,
         score: this.scoreDiseaseRelevance(disease, keywords, language)
@@ -373,4 +402,4 @@ class EnhancedVetCareAI {
 }
 
 // Export singleton instance
-export const enhancedVetCareAI = new EnhancedVetCareAI(mockDiseases);
+export const enhancedVetCareAI = new EnhancedVetCareAI();
